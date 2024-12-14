@@ -1,28 +1,33 @@
 import React, { useState } from "react";
 import Foxie from "../assets/x.png";
+import { Link, useNavigate } from "react-router-dom";
 import { 
   HomeIcon, 
   ClipboardListIcon, 
   CalendarIcon, 
   ChevronsLeftIcon, 
-  ChevronsRightIcon 
-} from 'lucide-react';
+  ChevronsRightIcon, 
+  DogIcon 
+} from "lucide-react";
 
-const SidebarItem = ({ icon, label, active = false, isSidebarExpanded }) => (
-  <li
-    className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors duration-200 cursor-pointer group
-        ${active 
-          ? "bg-[#f06937] text-black" 
-          : "text-gray-400 hover:bg-gray-800 hover:text-white"
-        }`}
-  >
-    {icon}
-    {isSidebarExpanded && <span className="text-sm">{label}</span>}
-  </li>
+const SidebarItem = ({ icon, label, active = false, isSidebarExpanded, to }) => (
+  <Link to={to} className="no-underline">
+    <li
+      className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors duration-200 cursor-pointer group
+          ${active 
+            ? "bg-[#f06937] text-black" 
+            : "text-gray-400 hover:bg-gray-800 hover:text-white"
+          }`}
+    >
+      {icon}
+      {isSidebarExpanded && <span className="text-sm">{label}</span>}
+    </li>
+  </Link>
 );
 
 const Sidebar = ({ isSidebarExpanded, toggleSidebar }) => {
   const [isHovered, setIsHovered] = useState(false);
+  const navigate = useNavigate();
 
   const handleMouseEnter = () => {
     if (!isSidebarExpanded) {
@@ -78,16 +83,25 @@ const Sidebar = ({ isSidebarExpanded, toggleSidebar }) => {
               active
               icon={<HomeIcon className="w-6 h-6" />}
               label="Dashboard"
+              to="/"
               isSidebarExpanded={isSidebarExpanded || isHovered}
             />
             <SidebarItem
               icon={<ClipboardListIcon className="w-6 h-6" />}
               label="Tasks"
+              to="/tasks"
               isSidebarExpanded={isSidebarExpanded || isHovered}
             />
             <SidebarItem
               icon={<CalendarIcon className="w-6 h-6" />}
               label="Schedule"
+              to="/schedule"
+              isSidebarExpanded={isSidebarExpanded || isHovered}
+            />
+            <SidebarItem
+              icon={<DogIcon className="w-6 h-6" />}
+              label="Foxie"
+              to="/chatbot"
               isSidebarExpanded={isSidebarExpanded || isHovered}
             />
           </ul>
