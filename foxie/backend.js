@@ -74,7 +74,7 @@ app.post("/api/chat", async (req, res) => {
       },
       {
         headers: {
-          Authorization: `Bearer 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`, // Replace with your OpenAI API key
+          Authorization: `Bearer OPENAIKEY`, // Replace with your OpenAI API key
           "Content-Type": "application/json",
         },
       }
