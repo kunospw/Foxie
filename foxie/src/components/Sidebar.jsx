@@ -1,53 +1,62 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
+import axios from "axios";
 import Foxie from "../assets/x.png";
-import { Link, useNavigate } from "react-router-dom";
-import { 
-  HomeIcon, 
-  ClipboardListIcon, 
-  CalendarIcon, 
-  ChevronsLeftIcon, 
-  ChevronsRightIcon, 
-  DogIcon 
+import {
+  HomeIcon,
+  ClipboardListIcon,
+  CalendarIcon,
+  ChevronsLeftIcon,
+  ChevronsRightIcon,
+  DogIcon,
+  ChevronDownIcon,
+  PlusIcon,
 } from "lucide-react";
 
-const SidebarItem = ({ icon, label, active = false, isSidebarExpanded, to }) => (
-  <Link to={to} className="no-underline">
-    <li
-      className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors duration-200 cursor-pointer group
-          ${active 
-            ? "bg-[#f06937] text-black" 
-            : "text-gray-400 hover:bg-gray-800 hover:text-white"
-          }`}
-    >
-      {icon}
-      {isSidebarExpanded && <span className="text-sm">{label}</span>}
-    </li>
-  </Link>
-);
-
 const Sidebar = ({ isSidebarExpanded, toggleSidebar }) => {
-  const [isHovered, setIsHovered] = useState(false);
-  const navigate = useNavigate();
+  const [sessions, setSessions] = useState([]);
+  const [isHovered, setIsHovered] = useState(false); // Manage hover state
+  const [isSessionsDropdownOpen, setIsSessionsDropdownOpen] = useState(false);
+  const location = useLocation();
 
-  const handleMouseEnter = () => {
-    if (!isSidebarExpanded) {
-      setIsHovered(true);
-    }
+  // Fetch sessions from the backend
+  useEffect(() => {
+    const fetchSessions = async () => {
+      try {
+        const response = await axios.get("http://localhost:5000/api/sessions");
+        setSessions(
+          response.data.sort(
+            (a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)
+          )
+        );
+      } catch (error) {
+        console.error("Error fetching sessions:", error.message);
+      }
+    };
+
+    fetchSessions();
+  }, []);
+
+  const toggleSessionsDropdown = () => {
+    setIsSessionsDropdownOpen(!isSessionsDropdownOpen);
   };
 
-  const handleMouseLeave = () => {
-    setIsHovered(false);
+  const createNewSession = async () => {
+    try {
+      const response = await axios.post("http://localhost:5000/api/sessions");
+      window.location.href = `/dashboard/chatbot/${response.data.id}`;
+    } catch (error) {
+      console.error("Error creating new session:", error.message);
+    }
   };
 
   return (
     <div
-      className={`bg-gray-900 shadow-2xl transition-all duration-300 ease-in-out fixed inset-y-0 left-0 z-30
-        ${isSidebarExpanded 
-          ? "w-64" 
-          : (isHovered ? "w-64" : "w-20")
-        } overflow-hidden`}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
+      className={`bg-gray-900 shadow-2xl transition-all duration-300 ease-in-out fixed inset-y-0 left-0 z-30 ${
+        isSidebarExpanded ? "w-64" : isHovered ? "w-64" : "w-20"
+      } overflow-hidden`}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
     >
       <div className="flex flex-col h-full">
         {/* Sidebar Header */}
@@ -55,13 +64,16 @@ const Sidebar = ({ isSidebarExpanded, toggleSidebar }) => {
           <div className="flex items-center gap-3">
             <img src={Foxie} alt="Logo" className="w-10 h-auto" />
             {(isSidebarExpanded || isHovered) && (
-              <h1 className="text-white text-xl font-bold tracking-tight">Study Helper</h1>
+              <h1 className="text-white text-xl font-bold tracking-tight">
+                Foxie
+              </h1>
             )}
           </div>
           {isSidebarExpanded && (
             <button
               onClick={toggleSidebar}
               className="text-gray-400 hover:text-[#f06937] transition-colors"
+              aria-label="Collapse Sidebar"
             >
               <ChevronsLeftIcon className="w-6 h-6" />
             </button>
@@ -70,6 +82,7 @@ const Sidebar = ({ isSidebarExpanded, toggleSidebar }) => {
             <button
               onClick={toggleSidebar}
               className="text-gray-400 hover:text-[#f06937] transition-colors"
+              aria-label="Expand Sidebar"
             >
               <ChevronsRightIcon className="w-6 h-6" />
             </button>
@@ -77,35 +90,70 @@ const Sidebar = ({ isSidebarExpanded, toggleSidebar }) => {
         </div>
 
         {/* Sidebar Navigation */}
-        <nav className="flex-1 py-4">
+        <nav className="flex-1 py-4" aria-label="Sidebar">
           <ul className="space-y-2 px-2">
-            <SidebarItem
-              active
-              icon={<HomeIcon className="w-6 h-6" />}
-              label="Dashboard"
-              to="/"
-              isSidebarExpanded={isSidebarExpanded || isHovered}
-            />
-            <SidebarItem
-              icon={<ClipboardListIcon className="w-6 h-6" />}
-              label="Tasks"
-              to="/tasks"
-              isSidebarExpanded={isSidebarExpanded || isHovered}
-            />
-            <SidebarItem
-              icon={<CalendarIcon className="w-6 h-6" />}
-              label="Schedule"
-              to="/schedule"
-              isSidebarExpanded={isSidebarExpanded || isHovered}
-            />
-            <SidebarItem
-              icon={<DogIcon className="w-6 h-6" />}
-              label="Foxie"
-              to="/chatbot"
-              isSidebarExpanded={isSidebarExpanded || isHovered}
-            />
-          </ul>
-        </nav>
+            {/* Dashboard Link */}
+            <li>
+              <Link
+                to="/dashboard"
+                className={`flex items-center gap-3 px-4 py-3 rounded-lg text-gray-400 hover:bg-gray-800 hover:text-white ${
+                  location.pathname === "/dashboard" ? "bg-[#f06937] text-black" : ""
+                }`}
+              >
+                <HomeIcon className="w-6 h-6" />
+                {isSidebarExpanded && <span>Dashboard</span>}
+              </Link>
+            </li>
+
+           {/* Foxie (Chatbot) Link */}
+          <li>
+            <div 
+              className="flex items-center justify-between px-4 py-3 text-gray-400 hover:bg-gray-800 hover:text-white cursor-pointer"
+              onClick={toggleSessionsDropdown}
+            >
+              <div className="flex items-center gap-3">
+                <DogIcon className="w-6 h-6" />
+                {(isSidebarExpanded || isHovered) && <span>Foxie</span>}
+              </div>
+              {(isSidebarExpanded || isHovered) && (
+                <div className="flex items-center">
+                  <button 
+                    onClick={createNewSession}
+                    className="mr-2 hover:text-[#f06937]"
+                    aria-label="New Session"
+                  >
+                    <PlusIcon className="w-4 h-4" />
+                  </button>
+                  <ChevronDownIcon 
+                    className={`w-4 h-4 transition-transform ${
+                      isSessionsDropdownOpen ? 'rotate-180' : ''
+                    }`} 
+                  />
+                </div>
+              )}
+            </div>
+            
+            {isSessionsDropdownOpen && (isSidebarExpanded || isHovered) && (
+              <ul className="ml-6 mt-2 space-y-2 max-h-40 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-gray-800">
+                {sessions.map((session) => (
+                  <li key={session.id}>
+                    <Link
+                      to={`/dashboard/chatbot/${session.id}`}
+                      className={`flex items-center gap-3 px-4 py-3 rounded-lg text-gray-400 hover:bg-gray-800 hover:text-white ${
+                        location.pathname === `/dashboard/chatbot/${session.id}`
+                          ? "bg-[#f06937] text-black"
+                          : ""
+                      }`}
+                    >
+                      {session.name}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </li>
+        </ul>
+      </nav>
 
         {/* Sidebar Footer */}
         <div className="p-4 border-t border-gray-800">
@@ -116,7 +164,9 @@ const Sidebar = ({ isSidebarExpanded, toggleSidebar }) => {
             {(isSidebarExpanded || isHovered) && (
               <div className="flex-1 overflow-hidden">
                 <p className="text-white font-medium truncate">Alex Johnson</p>
-                <p className="text-gray-400 text-xs truncate">alex.johnson@gmail.com</p>
+                <p className="text-gray-400 text-xs truncate">
+                  alex.johnson@gmail.com
+                </p>
               </div>
             )}
           </div>

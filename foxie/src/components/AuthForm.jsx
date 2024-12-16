@@ -1,5 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext"; // Import AuthContext
 import { auth, googleProvider, firestore } from "../firebase";
 import {
   signInWithEmailAndPassword,
@@ -17,8 +18,15 @@ const AuthForm = () => {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isRegister, setIsRegister] = useState(false);
-
+  const { user } = useAuth(); // Access the authenticated user
   const navigate = useNavigate();
+
+  // Redirect to dashboard if user is already logged in
+  useEffect(() => {
+    if (user) {
+      navigate("/dashboard"); // Redirect if authenticated
+    }
+  }, [user, navigate]);
 
   const showSuccessAlert = (message) => {
     Swal.fire({
@@ -182,8 +190,7 @@ const AuthForm = () => {
             onClick={handleGoogleSignIn}
             className="w-full flex items-center justify-center bg-gray-800 text-white py-2 rounded-md hover:bg-gray-700"
           >
-             {/* Add Google Logo */}
-          <svg
+         <svg
             className="h-5 w-5 mr-2"
             xmlns="http://www.w3.org/2000/svg"
             xmlnsXlink="http://www.w3.org/1999/xlink"
