@@ -49,41 +49,32 @@ const AuthForm = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
-    if (isRegister && password !== confirmPassword) {
-      showErrorAlert("Passwords do not match.");
-      return;
-    }
-
+  
     try {
       if (isRegister) {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         await updateProfile(userCredential.user, { displayName: username });
-
-        await setDoc(
-          doc(firestore, "users", userCredential.user.uid),
-          {
-            uid: userCredential.user.uid,
-            email,
-            username,
-            createdAt: serverTimestamp(),
-          },
-          { merge: true }
-        );
-
-        showSuccessAlert("Registration successful! Please login.");
-        navigate("/"); // Redirect to login
+  
+        // More robust user document creation
+        const userDocRef = doc(firestore, "users", userCredential.user.uid);
+        await setDoc(userDocRef, {
+          uid: userCredential.user.uid,
+          email,
+          username,
+          createdAt: serverTimestamp(),
+        }, { merge: true });
+  
+        showSuccessAlert("Registration successful!");
+        setIsRegister(false); // Switch back to login
       } else {
-        const userCredential = await signInWithEmailAndPassword(auth, email, password);
-
-        showSuccessAlert("Login successful!");
-        navigate("/dashboard"); // Redirect to dashboard
+        await signInWithEmailAndPassword(auth, email, password);
+        navigate("/dashboard");
       }
     } catch (err) {
-      showErrorAlert(err.message);
+      console.error("Authentication Error:", err);
+      showErrorAlert(err.message || "Authentication failed");
     }
   };
-
   const handleGoogleSignIn = async () => {
     try {
       const userCredential = await signInWithPopup(auth, googleProvider);

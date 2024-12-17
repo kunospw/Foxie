@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { firestore } from "../firebase";
+import { useAuth } from "../context/AuthContext";
 import {
   collection,
   addDoc,
@@ -14,9 +15,10 @@ import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import interactionPlugin from "@fullcalendar/interaction";
 
-const DashboardContent = ({ isSidebarExpanded, user }) => {
-  const [whatsDue, setWhatsDue] = useState([]);
-  const [upcoming, setUpcoming] = useState([]);
+const DashboardContent = ({ isSidebarExpanded }) => {
+  const { user } = useAuth();
+
+  const [assignments, setAssignments] = useState([]);
   const [calendarEvents, setCalendarEvents] = useState([]);
   const [currentDate, setCurrentDate] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
@@ -25,78 +27,106 @@ const DashboardContent = ({ isSidebarExpanded, user }) => {
   const [selectedDateEvents, setSelectedDateEvents] = useState([]);
 
   useEffect(() => {
+    if (!user) return;
+
     const today = new Date();
     setCurrentDate(today.toLocaleDateString("en-US", { dateStyle: "full" }));
 
-    const whatsDueQuery = query(collection(firestore, "whatsDue"), orderBy("createdAt", "asc"));
-    const upcomingQuery = query(collection(firestore, "upcoming"), orderBy("createdAt", "asc"));
-    const calendarEventsQuery = query(collection(firestore, "calendarEvents"), orderBy("start", "asc"));
+    // Assignments query
+    const assignmentsQuery = query(
+      collection(firestore, "users", user.uid, "assignments")
+    );
 
-    const unsubscribeWhatsDue = onSnapshot(whatsDueQuery, (snapshot) => {
-      setWhatsDue(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
-    });
+    // Calendar Events query
+    const calendarEventsQuery = query(
+      collection(firestore, "users", user.uid, "calendarEvents")
+    );
 
-    const unsubscribeUpcoming = onSnapshot(upcomingQuery, (snapshot) => {
-      setUpcoming(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
+    const unsubscribeAssignments = onSnapshot(assignmentsQuery, (snapshot) => {
+      setAssignments(snapshot.docs.map((doc) => ({ 
+        id: doc.id, 
+        ...doc.data() 
+      })));
     });
 
     const unsubscribeCalendarEvents = onSnapshot(calendarEventsQuery, (snapshot) => {
-      setCalendarEvents(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
+      setCalendarEvents(snapshot.docs.map((doc) => ({ 
+        id: doc.id, 
+        ...doc.data() 
+      })));
     });
 
     return () => {
-      unsubscribeWhatsDue();
-      unsubscribeUpcoming();
+      unsubscribeAssignments();
       unsubscribeCalendarEvents();
     };
-  }, []);
+  }, [user]);
 
-  const handleAddCalendarEvent = async (eventTitle) => {
-    if (!user || !user.uid) {
-      console.error("User not authenticated. Cannot add event.");
-      return;
-    }
+  // Compute sorted upcoming events (both assignments and calendar events)
+  const sortedUpcomingEvents = useMemo(() => {
+    const today = new Date();
+    
+    // Combine assignments and calendar events
+    const combinedEvents = [
+      ...assignments.map(assignment => ({
+        ...assignment,
+        type: 'assignment',
+        date: new Date(assignment.dueDate)
+      })),
+      ...calendarEvents.map(event => ({
+        ...event,
+        type: 'event',
+        date: new Date(event.start)
+      }))
+    ];
 
-    if (!selectedDate) {
-      console.error("No date selected.");
+    // Sort events by date, keeping only future events
+    return combinedEvents
+      .filter(event => event.date >= today)
+      .sort((a, b) => a.date - b.date);
+  }, [assignments, calendarEvents]);
+
+  // Compute what's due (events due soon)
+  const whatsDue = useMemo(() => {
+    const today = new Date();
+    const nextWeek = new Date(today);
+    nextWeek.setDate(today.getDate() + 7);
+
+    return sortedUpcomingEvents
+      .filter(event => event.date <= nextWeek)
+      .slice(0, 5); // Limit to top 5 upcoming events
+  }, [sortedUpcomingEvents]);
+
+  const handleDeleteTask = async (id, type) => {
+    if (!user) {
+      console.error("User not authenticated. Cannot delete task.");
       return;
     }
 
     try {
-      await addDoc(collection(firestore, "calendarEvents"), {
-        title: eventTitle,
-        start: new Date(selectedDate),
-        allDay: true,
-        userId: user.uid, // Ensure user.uid exists
+      await deleteDoc(doc(firestore, "users", user.uid, type === 'assignment' ? "assignments" : "calendarEvents", id));
+    } catch (error) {
+      console.error(`Error deleting task: `, error);
+    }
+  };
+
+  const handleAddTask = async (taskData, type) => {
+    if (!user) {
+      console.error("User not authenticated. Cannot add task.");
+      return;
+    }
+
+    try {
+      await addDoc(collection(firestore, "users", user.uid, type), {
+        ...taskData,
+        createdAt: new Date()
       });
-      setSelectedDate(null);
     } catch (error) {
-      console.error("Error adding event: ", error);
+      console.error(`Error adding task to ${type}: `, error);
     }
   };
 
-  const handleDeleteTask = async (id, collectionName) => {
-    try {
-      await deleteDoc(doc(firestore, collectionName, id));
-    } catch (error) {
-      console.error(`Error deleting task from ${collectionName}: `, error);
-    }
-  };
-
-  const handleDateClick = (info) => {
-    setSelectedDate(info.dateStr);
-    const eventsOnDate = calendarEvents.filter(
-      (event) =>
-        new Date(event.start).toISOString().split("T")[0] === info.dateStr
-    );
-    setSelectedDateEvents(eventsOnDate);
-  };
-
-  const openModal = (type, collectionName) => {
-    setModalData({ type, collectionName });
-    setModalOpen(true);
-  };
-
+  // Render methods remain similar to previous implementation
   return (
     <div
       className={`flex-1 bg-gray-800 p-6 transition-all duration-300 ease-in-out ${
@@ -105,7 +135,7 @@ const DashboardContent = ({ isSidebarExpanded, user }) => {
     >
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold text-[#f06937]">
-          Welcome, {user?.displayName || "User"}!
+          Welcome, {user?.displayName || user?.email || "User"}!
         </h1>
         <p className="text-gray-400">{currentDate}</p>
       </div>
@@ -115,18 +145,10 @@ const DashboardContent = ({ isSidebarExpanded, user }) => {
         <ContentCard
           title="What's Due"
           content={
-            <>
-              <TaskList
-                tasks={whatsDue}
-                onDeleteTask={(id) => handleDeleteTask(id, "whatsDue")}
-              />
-              <button
-                onClick={() => openModal("Add Task", "whatsDue")}
-                className="bg-[#f06937] text-white py-2 px-4 rounded-lg hover:bg-opacity-90"
-              >
-                Add New Task
-              </button>
-            </>
+            <TaskList
+              tasks={whatsDue}
+              onDeleteTask={(id, type) => handleDeleteTask(id, type)}
+            />
           }
         />
 
@@ -134,85 +156,35 @@ const DashboardContent = ({ isSidebarExpanded, user }) => {
         <ContentCard
           title="Upcoming"
           content={
-            <>
-              <TaskList
-                tasks={upcoming}
-                onDeleteTask={(id) => handleDeleteTask(id, "upcoming")}
-              />
-              <button
-                onClick={() => openModal("Add Task", "upcoming")}
-                className="bg-[#f06937] text-white py-2 px-4 rounded-lg hover:bg-opacity-90"
-              >
-                Add New Task
-              </button>
-            </>
+            <TaskList
+              tasks={sortedUpcomingEvents}
+              onDeleteTask={(id, type) => handleDeleteTask(id, type)}
+            />
           }
         />
 
-        {/* Calendar Section */}
+        {/* Calendar Section - Similar to previous implementation */}
         <ContentCard
           title="Calendar"
           content={
-            <>
-              <FullCalendar
-                plugins={[dayGridPlugin, interactionPlugin]}
-                initialView="dayGridMonth"
-                events={calendarEvents}
-                dateClick={handleDateClick}
-                height="auto"
-              />
-              {selectedDate && (
-                <div className="mt-4 bg-gray-900 p-4 rounded-lg">
-                  <h3 className="text-lg text-white mb-2">
-                    Events on {selectedDate}
-                  </h3>
-                  {selectedDateEvents.map((event) => (
-                    <div
-                      key={event.id}
-                      className="flex justify-between bg-gray-800 p-2 rounded"
-                    >
-                      <span className="text-white">{event.title}</span>
-                      <button
-                        onClick={() => handleDeleteTask(event.id, "calendarEvents")}
-                        className="text-red-500 hover:text-red-700"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  ))}
-                  <input
-                    type="text"
-                    placeholder="Add Event Title"
-                    className="w-full mt-2 p-2 bg-gray-800 text-white rounded"
-                    onKeyPress={(e) => {
-                      if (e.key === "Enter" && e.target.value.trim()) {
-                        handleAddCalendarEvent(e.target.value.trim());
-                        e.target.value = "";
-                      }
-                    }}
-                  />
-                </div>
-              )}
-            </>
+            <FullCalendar
+              plugins={[dayGridPlugin, interactionPlugin]}
+              initialView="dayGridMonth"
+              events={calendarEvents.map(event => ({
+                title: event.title,
+                start: event.start,
+                allDay: event.allDay
+              }))}
+              height="auto"
+            />
           }
         />
       </div>
-
-      {modalOpen && (
-        <Modal
-          isOpen={modalOpen}
-          onClose={() => setModalOpen(false)}
-          onSave={(task) => {
-            handleAddTask(task, modalData.collectionName);
-            setModalOpen(false);
-          }}
-          title={modalData.type}
-        />
-      )}
     </div>
   );
 };
 
+// Utility components remain the same
 const ContentCard = ({ title, content }) => (
   <div className="bg-gray-900 p-5 rounded-lg shadow">
     <h2 className="text-xl text-white mb-4">{title}</h2>
@@ -227,9 +199,16 @@ const TaskList = ({ tasks, onDeleteTask }) => (
         key={task.id}
         className="flex justify-between bg-gray-800 p-2 rounded mb-2"
       >
-        <span className="text-white">{task.content || task.title}</span>
+        <div className="flex flex-col">
+          <span className="text-white">
+            {task.title || task.content}
+          </span>
+          <span className="text-sm text-gray-400">
+            {new Date(task.date || task.dueDate || task.start).toLocaleDateString()}
+          </span>
+        </div>
         <button
-          onClick={() => onDeleteTask(task.id)}
+          onClick={() => onDeleteTask(task.id, task.type)}
           className="text-red-500 hover:text-red-700"
         >
           Delete

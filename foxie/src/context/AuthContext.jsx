@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { auth } from "../firebase"; // Firebase instance
-import { onAuthStateChanged, signOut } from "firebase/auth";
+import { auth } from "../firebase";
+import { onAuthStateChanged, signOut } from "firebase/auth"; // Import signOut
 
 const AuthContext = createContext();
 
@@ -10,14 +10,8 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Monitor auth state
   useEffect(() => {
-    // Clear user session on app start (development only)
-    const clearSession = async () => {
-      await signOut(auth); // Log out the user
-    };
-
-    clearSession();
-
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       setLoading(false);
@@ -26,8 +20,24 @@ export const AuthProvider = ({ children }) => {
     return unsubscribe;
   }, []);
 
+  // Logout function
+  const logout = async () => {
+    try {
+      await signOut(auth);
+      console.log("User logged out successfully");
+    } catch (error) {
+      console.error("Logout failed:", error.message);
+    }
+  };
+
+  const value = {
+    user,
+    loading,
+    logout, // Add logout to the context
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading }}>
+    <AuthContext.Provider value={value}>
       {!loading && children}
     </AuthContext.Provider>
   );
