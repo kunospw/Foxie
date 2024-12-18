@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import React, { useState, forwardRef, useImperativeHandle, useCallback } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../context/AuthContext";
 import Foxie from "../assets/x.png";
@@ -8,88 +8,123 @@ import {
   ChevronsLeftIcon,
   ChevronsRightIcon,
   DogIcon,
-  ChevronDownIcon,
   PlusIcon,
   LogOutIcon,
 } from "lucide-react";
 
-const Sidebar = ({ isSidebarExpanded, toggleSidebar }) => {
-  const { user, logout } = useAuth(); // Added logout function
+const Sidebar = forwardRef(({ isSidebarExpanded, toggleSidebar }, ref) => {
+  const { user, logout } = useAuth();
   const [sessions, setSessions] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isHovered, setIsHovered] = useState(false);
   const [isSessionsDropdownOpen, setIsSessionsDropdownOpen] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
 
-  // Fetch sessions from the backend
-  useEffect(() => {
-    const fetchSessions = async () => {
-      if (!user) {
-        setIsLoading(false);
-        return;
-      }
+ // Expose methods to parent components
+ useImperativeHandle(ref, () => ({
+  removeSessionFromList: (sessionId) => {
+    setSessions((currentSessions) =>
+      currentSessions.filter((session) => session.id !== sessionId)
+    );
+  },
+  addSessionToList: (newSession) => {
+    setSessions((currentSessions) => [
+      newSession,
+      ...currentSessions
+    ]);
+  },
+  getSessions: () => sessions,
+}));
 
-      try {
-        setIsLoading(true);
-        const response = await axios.get("http://localhost:5000/api/sessions", {
-          params: { userId: user.uid },
-        });
-        setSessions(
-          response.data.sort(
-            (a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)
-          )
-        );
-        setError(null);
-      } catch (error) {
-        console.error("Error fetching sessions:", error.message);
-        setError("Failed to load sessions. Please try again.");
-        setSessions([]);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchSessions();
+  // Fetch user sessions (keep existing implementation)
+  const fetchSessions = React.useCallback(async () => {
+    if (!user) {
+      setIsLoading(false);
+      return;
+    }
+    try {
+      setIsLoading(true);
+      console.log("Fetching sessions for user:", user.uid); // Debug log
+      const response = await axios.get("http://localhost:5000/api/sessions", {
+        params: { userId: user.uid },
+      });
+      console.log("Sessions response:", response.data); // Debug log
+      setSessions(
+        response.data.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
+      );
+      setError(null);
+    } catch (error) {
+      console.error("Detailed error fetching sessions:", error);
+      setError(`Failed to load sessions: ${error.response?.data?.error || error.message}`);
+      setSessions([]);
+    } finally {
+      setIsLoading(false);
+    }
   }, [user]);
 
-  const toggleSessionsDropdown = () => {
-    setIsSessionsDropdownOpen(!isSessionsDropdownOpen);
-  };
+  React.useEffect(() => {
+    fetchSessions();
+  }, [fetchSessions]);
 
-  const createNewSession = async () => {
-    if (!user) return;
-    try {
-      const response = await axios.post("http://localhost:5000/api/sessions", {
-        userId: user.uid,
-      });
-      window.location.href = `/dashboard/chatbot/${response.data.id}`;
-    } catch (error) {
-      console.error("Error creating new session:", error.message);
-      setError("Failed to create a new session. Please try again.");
-    }
-  };
+  // Create a new chat session
+const createNewSession = async (e) => {
+  e.stopPropagation(); // Prevent bubbling
+  if (!user) return;
+  try {
+    setIsLoading(true);
+    const response = await axios.post("http://localhost:5000/api/sessions", {
+      userId: user.uid,
+    });
+    
+    // Immediately fetch updated sessions to ensure list is current
+    await fetchSessions();
+    
+    // Navigate to the new session
+    navigate(`/dashboard/chatbot/${response.data.id}`);
+  } catch (error) {
+    console.error("Error creating new session:", error.message);
+    setError("Failed to create a new session. Please try again.");
+  } finally {
+    setIsLoading(false);
+  }
+};
+
+  // Handle logout
   const handleLogout = async () => {
     if (window.confirm("Are you sure you want to log out?")) {
       try {
-        await logout(); // Call the logout function
-        window.location.href = "/"; // Redirect to login
+        await logout();
+        window.location.href = "/";
       } catch (error) {
         console.error("Logout failed:", error.message);
       }
     }
   };
+
+  // Toggle dropdown visibility
+  const toggleSessionsDropdown = () => {
+    setIsSessionsDropdownOpen(!isSessionsDropdownOpen);
+  };
+
+  // Render session list
   const renderSessionList = () => {
-    if (isLoading) return <div className="text-gray-400 px-4 py-2">Loading sessions...</div>;
-    if (error) return <div className="text-red-500 px-4 py-2">{error}</div>;
-    if (sessions.length === 0) return <div className="text-gray-400 px-4 py-2">No sessions found</div>;
+    if (isLoading)
+      return <div className="text-gray-400 px-4 py-2">Loading sessions...</div>;
+    if (error)
+      return <div className="text-red-500 px-4 py-2">{error}</div>;
+    if (sessions.length === 0)
+      return <div className="text-gray-400 px-4 py-2">No sessions found</div>;
 
     return sessions.map((session) => (
       <li key={session.id}>
         <Link
           to={`/dashboard/chatbot/${session.id}`}
           className={`flex items-center gap-3 px-4 py-3 rounded-lg text-gray-400 hover:bg-gray-800 hover:text-white ${
-            location.pathname === `/dashboard/chatbot/${session.id}` ? "bg-[#f06937] text-black" : ""
+            location.pathname === `/dashboard/chatbot/${session.id}`
+              ? "bg-[#f06937] text-black"
+              : ""
           }`}
         >
           {session.name || "Unnamed Session"}
@@ -97,7 +132,6 @@ const Sidebar = ({ isSidebarExpanded, toggleSidebar }) => {
       </li>
     ));
   };
-
   return (
     <div
       className={`bg-gray-900 shadow-2xl transition-all duration-300 ease-in-out fixed inset-y-0 left-0 z-30 ${
@@ -106,6 +140,7 @@ const Sidebar = ({ isSidebarExpanded, toggleSidebar }) => {
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
+      {/* Rest of the existing Sidebar implementation remains the same */}
       <div className="flex flex-col h-full">
         {/* Sidebar Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-800">
@@ -115,23 +150,21 @@ const Sidebar = ({ isSidebarExpanded, toggleSidebar }) => {
               <h1 className="text-white text-xl font-bold tracking-tight">Foxie</h1>
             )}
           </div>
-          {isSidebarExpanded ? (
-            <button onClick={toggleSidebar} className="text-gray-400 hover:text-[#f06937]">
+          <button
+            onClick={toggleSidebar}
+            className="text-gray-400 hover:text-[#f06937]"
+          >
+            {isSidebarExpanded ? (
               <ChevronsLeftIcon className="w-6 h-6" />
-            </button>
-          ) : (
-            isHovered && (
-              <button onClick={toggleSidebar} className="text-gray-400 hover:text-[#f06937]">
-                <ChevronsRightIcon className="w-6 h-6" />
-              </button>
-            )
-          )}
+            ) : (
+              isHovered && <ChevronsRightIcon className="w-6 h-6" />
+            )}
+          </button>
         </div>
 
-        {/* Sidebar Navigation */}
-        <nav className="flex-1 py-4" aria-label="Sidebar">
+        {/* Rest of the sidebar content */}
+        <nav className="flex-1 py-4">
           <ul className="space-y-2 px-2">
-            {/* Dashboard Link */}
             <li>
               <Link
                 to="/dashboard"
@@ -143,8 +176,6 @@ const Sidebar = ({ isSidebarExpanded, toggleSidebar }) => {
                 {isSidebarExpanded && <span>Dashboard</span>}
               </Link>
             </li>
-
-            {/* Foxie Sessions */}
             <li>
               <div
                 className="flex items-center justify-between px-4 py-3 text-gray-400 hover:bg-gray-800 hover:text-white cursor-pointer"
@@ -154,14 +185,16 @@ const Sidebar = ({ isSidebarExpanded, toggleSidebar }) => {
                   <DogIcon className="w-6 h-6" />
                   {(isSidebarExpanded || isHovered) && <span>Foxie</span>}
                 </div>
-                <PlusIcon
+                <button
                   onClick={createNewSession}
-                  className="w-4 h-4 hover:text-[#f06937]"
+                  className="text-gray-400 hover:text-[#f06937]"
                   aria-label="New Session"
-                />
+                >
+                  <PlusIcon className="w-5 h-5" />
+                </button>
               </div>
               {isSessionsDropdownOpen && (isSidebarExpanded || isHovered) && (
-                <ul className="ml-6 mt-2 space-y-2 max-h-40 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-gray-800">
+                <ul className="ml-6 mt-2 space-y-2 max-h-40 overflow-y-auto">
                   {renderSessionList()}
                 </ul>
               )}
@@ -173,19 +206,19 @@ const Sidebar = ({ isSidebarExpanded, toggleSidebar }) => {
         <div className="p-4 border-t border-gray-800">
           <div className="flex items-center justify-between bg-gray-800 rounded-lg p-3">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-[#f06937] flex items-center justify-center text-black font-bold">
+              <div className="w-10 h-10 rounded-full bg-[#f06937] text-black flex items-center justify-center">
                 {user?.displayName?.[0] || "A"}
               </div>
-              {(isSidebarExpanded || isHovered) && user && (
-                <div className="flex-1">
-                  <p className="text-white font-medium truncate">{user.displayName || "Anonymous"}</p>
-                  <p className="text-gray-400 text-xs truncate">{user.email || "No email"}</p>
+              {(isSidebarExpanded || isHovered) && (
+                <div>
+                  <p className="text-white font-medium">{user?.displayName || "Anonymous"}</p>
+                  <p className="text-gray-400 text-sm">{user?.email || "No email"}</p>
                 </div>
               )}
             </div>
             <button
               onClick={handleLogout}
-              className="text-gray-400 hover:text-red-500 transition-colors"
+              className="text-gray-400 hover:text-red-500"
               aria-label="Logout"
             >
               <LogOutIcon className="w-6 h-6" />
@@ -195,6 +228,6 @@ const Sidebar = ({ isSidebarExpanded, toggleSidebar }) => {
       </div>
     </div>
   );
-};
+});
 
 export default Sidebar;
