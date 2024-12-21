@@ -5,8 +5,14 @@ import { v2 as cloudinary } from "cloudinary";
 import admin from "firebase-admin";
 import dotenv from "dotenv";
 import fs from "fs";
+import { fileURLToPath } from "url";
+import { dirname, resolve } from "path";
 
-dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+dotenv.config({ path: resolve(__dirname, "../.env") });
+console.log("Environment Variables Loaded:", process.env.OPENAI_API_KEY);
 // Configure Cloudinary
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -14,11 +20,13 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 const app = express();
-const PORT = 5000;
-
 app.use(express.json());
-app.use(cors({ origin: "*" })); // Temporarily allow all origins
-// Utility function to check if file exists in Cloudinary
+const allowedOrigins =
+  process.env.NODE_ENV === "production"
+    ? ["https://your-vercel-project-domain.vercel.app"] // Replace with your actual domain
+    : ["http://localhost:3000"];
+
+app.use(cors({ origin: allowedOrigins }));
 
 async function checkFileExists(publicId, resourceType = "auto") {
   try {
@@ -35,11 +43,8 @@ async function checkFileExists(publicId, resourceType = "auto") {
 }
 
 // Load Firebase service account key dynamically
-const serviceAccount = JSON.parse(
-  fs.readFileSync("./serviceAccountKey.json", "utf-8")
-);
+const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 
-// Initialize Firebase Admin with Service Account
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
 });
@@ -334,9 +339,4 @@ app.post("/api/deleteFile", async (req, res) => {
 });
 
 // Start the server
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(
-    `OpenAI API Key Loaded: ${process.env.OPENAI_API_KEY ? "Yes" : "No"}`
-  );
-});
+console.log("API server is ready for Vercel deployment!");
