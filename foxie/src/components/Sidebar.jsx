@@ -51,7 +51,7 @@ const Sidebar = forwardRef(({ isSidebarExpanded, toggleSidebar }, ref) => {
     try {
       setIsLoading(true);
       console.log("Fetching sessions for user:", user.uid); // Debug log
-      const response = await axios.get("${API_URL}/api/sessions", {
+      const response = await axios.get('${API_URL}/api/sessions', {
         params: { userId: user.uid },
       });
       console.log("Sessions response:", response.data); // Debug log
@@ -78,7 +78,7 @@ const createNewSession = async (e) => {
   if (!user) return;
   try {
     setIsLoading(true);
-    const response = await axios.post("${API_URL}/api/sessions", {
+    const response = await axios.post('${API_URL}/api/sessions', {
       userId: user.uid,
     });
     
