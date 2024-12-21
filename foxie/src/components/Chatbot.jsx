@@ -71,7 +71,7 @@ const Chatbot = ({ isSidebarExpanded, sidebarRef }) => {
     if (!user) return navigate("/login");
     try {
       setIsCreatingSession(true);
-      const response = await axios.post('${API_URL}/api/sessions', {
+      const response = await axios.post(`${API_URL}/api/sessions`, {
         userId: user.uid,
       });
 
@@ -206,7 +206,7 @@ useEffect(() => {
         content: msg.text,
       }));
   
-      const response = await axios.post('${API_URL}/api/chat', {
+      const response = await axios.post(`${API_URL}/api/chat`, {
         sessionId: currentSessionId,
         prompt: lastUserMessage.text,
         messages: firestoreMessages,
