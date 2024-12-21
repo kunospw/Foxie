@@ -5,7 +5,7 @@ import { useAuth } from "../context/AuthContext";
 import { Loader2, Upload, Trash2, RefreshCw } from "lucide-react";
 import Swal from 'sweetalert2';
 
-const CLOUDINARY_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${import.meta.env.VITE_CLOUD_NAME}`;
+const CLOUDINARY_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${import.meta.env.CLOUDINARY_CLOUD_NAME}`;
 const UPLOAD_PRESET = import.meta.env.VITE_UPLOAD_PRESET;
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
