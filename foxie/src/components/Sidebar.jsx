@@ -1,4 +1,4 @@
-import React, { useState, forwardRef, useImperativeHandle, useCallback } from "react";
+import React, { useState, forwardRef, useImperativeHandle } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../context/AuthContext";
@@ -10,6 +10,10 @@ import {
   DogIcon,
   PlusIcon,
   LogOutIcon,
+  CalendarIcon,
+  NotebookIcon,
+  CheckSquareIcon,
+  BookIcon,
 } from "lucide-react";
 
 const Sidebar = forwardRef(({ isSidebarExpanded, toggleSidebar }, ref) => {
@@ -136,14 +140,13 @@ const createNewSession = async (e) => {
     <div
       className={`bg-gray-900 shadow-2xl transition-all duration-300 ease-in-out fixed inset-y-0 left-0 z-30 ${
         isSidebarExpanded ? "w-64" : isHovered ? "w-64" : "w-20"
-      } overflow-hidden`}
+      } flex flex-col`}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      {/* Rest of the existing Sidebar implementation remains the same */}
-      <div className="flex flex-col h-full">
-        {/* Sidebar Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-800">
+      {/* Sidebar Header - Fixed at top */}
+      <div className="flex-none border-b border-gray-800">
+        <div className="flex items-center justify-between p-4">
           <div className="flex items-center gap-3">
             <img src={Foxie} alt="Logo" className="w-10 h-auto" />
             {(isSidebarExpanded || isHovered) && (
@@ -161,9 +164,11 @@ const createNewSession = async (e) => {
             )}
           </button>
         </div>
+      </div>
 
-        {/* Rest of the sidebar content */}
-        <nav className="flex-1 py-4">
+      {/* Main Navigation - Scrollable */}
+      <nav className="flex-1 overflow-y-auto scrollbar-hide">
+        <div className="py-4">
           <ul className="space-y-2 px-2">
             <li>
               <Link
@@ -173,7 +178,51 @@ const createNewSession = async (e) => {
                 }`}
               >
                 <HomeIcon className="w-6 h-6" />
-                {isSidebarExpanded && <span>Dashboard</span>}
+                {(isSidebarExpanded || isHovered) && <span>Dashboard</span>}
+              </Link>
+            </li>
+            <li>
+              <Link
+                to="/dashboard/calendar"
+                className={`flex items-center gap-3 px-4 py-3 rounded-lg text-gray-400 hover:bg-gray-800 hover:text-white ${
+                  location.pathname === "/dashboard/calendar" ? "bg-[#f06937] text-black" : ""
+                }`}
+              >
+                <CalendarIcon className="w-6 h-6" />
+                {(isSidebarExpanded || isHovered) && <span>Calendar</span>}
+              </Link>
+            </li>
+            <li>
+              <Link
+                to="/dashboard/notes"
+                className={`flex items-center gap-3 px-4 py-3 rounded-lg text-gray-400 hover:bg-gray-800 hover:text-white ${
+                  location.pathname === "/dashboard/notes" ? "bg-[#f06937] text-black" : ""
+                }`}
+              >
+                <NotebookIcon className="w-6 h-6" />
+                {(isSidebarExpanded || isHovered) && <span>Notes</span>}
+              </Link>
+            </li>
+            <li>
+              <Link
+                to="/dashboard/assignments"
+                className={`flex items-center gap-3 px-4 py-3 rounded-lg text-gray-400 hover:bg-gray-800 hover:text-white ${
+                  location.pathname === "/dashboard/assignments" ? "bg-[#f06937] text-black" : ""
+                }`}
+              >
+                <CheckSquareIcon className="w-6 h-6" />
+                {(isSidebarExpanded || isHovered) && <span>Assignments</span>}
+              </Link>
+            </li>
+            <li>
+              <Link
+                to="/dashboard/courses"
+                className={`flex items-center gap-3 px-4 py-3 rounded-lg text-gray-400 hover:bg-gray-800 hover:text-white ${
+                  location.pathname === "/dashboard/courses" ? "bg-[#f06937] text-black" : ""
+                }`}
+              >
+                <BookIcon className="w-6 h-6" />
+                {(isSidebarExpanded || isHovered) && <span>Courses</span>}
               </Link>
             </li>
             <li>
@@ -194,16 +243,18 @@ const createNewSession = async (e) => {
                 </button>
               </div>
               {isSessionsDropdownOpen && (isSidebarExpanded || isHovered) && (
-                <ul className="ml-6 mt-2 space-y-2 max-h-40 overflow-y-auto">
+                <ul className="ml-6 mt-2 space-y-2 max-h-40 overflow-y-auto scrollbar-hide">
                   {renderSessionList()}
                 </ul>
               )}
             </li>
           </ul>
-        </nav>
+        </div>
+      </nav>
 
-        {/* Sidebar Footer */}
-        <div className="p-4 border-t border-gray-800">
+      {/* Sidebar Footer - Fixed at bottom */}
+      <div className="flex-none border-t border-gray-800">
+        <div className="p-4">
           <div className="flex items-center justify-between bg-gray-800 rounded-lg p-3">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-[#f06937] text-black flex items-center justify-center">

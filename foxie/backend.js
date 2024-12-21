@@ -1,17 +1,38 @@
 import express from "express";
 import axios from "axios";
 import cors from "cors";
+import { v2 as cloudinary } from "cloudinary";
 import admin from "firebase-admin";
 import dotenv from "dotenv";
 import fs from "fs";
 
 dotenv.config();
-
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 const app = express();
 const PORT = 5000;
 
 app.use(express.json());
 app.use(cors({ origin: "*" })); // Temporarily allow all origins
+// Utility function to check if file exists in Cloudinary
+
+async function checkFileExists(publicId, resourceType = "auto") {
+  try {
+    const result = await cloudinary.api.resource(publicId, {
+      resource_type: resourceType,
+    });
+    return true;
+  } catch (error) {
+    if (error.http_code === 404) {
+      return false;
+    }
+    throw error;
+  }
+}
 
 // Load Firebase service account key dynamically
 const serviceAccount = JSON.parse(
@@ -227,6 +248,88 @@ app.delete("/api/sessions/:sessionId", async (req, res) => {
     res
       .status(500)
       .json({ error: "Failed to delete session", details: error.message });
+  }
+});
+// In your server code
+app.post("/api/notes/sync", async (req, res) => {
+  const { userId } = req.body;
+
+  if (!userId) {
+    return res.status(400).json({ error: "User ID is required." });
+  }
+
+  try {
+    const notesRef = db.collection("users").doc(userId).collection("notes");
+    const notesSnapshot = await notesRef.get();
+
+    const syncResults = {
+      synced: 0,
+      removed: 0,
+      errors: [],
+    };
+
+    for (const doc of notesSnapshot.docs) {
+      const note = doc.data();
+      try {
+        const fileExists = await checkFileExists(
+          note.publicId,
+          note.resourceType || "image"
+        );
+
+        if (!fileExists) {
+          await notesRef.doc(doc.id).delete();
+          syncResults.removed++;
+        } else {
+          syncResults.synced++;
+        }
+      } catch (error) {
+        syncResults.errors.push({
+          noteId: doc.id,
+          error: error.message,
+        });
+      }
+    }
+
+    res.json(syncResults);
+  } catch (error) {
+    console.error("Error syncing notes:", error);
+    res.status(500).json({ error: "Failed to sync notes" });
+  }
+});
+
+app.post("/api/deleteFile", async (req, res) => {
+  try {
+    const { publicId, resourceType = "auto" } = req.body;
+
+    console.log("Attempting to delete:", { publicId, resourceType }); // Add logging
+
+    // Verify the file exists before attempting deletion
+    try {
+      await cloudinary.api.resource(publicId, { resource_type: resourceType });
+    } catch (error) {
+      if (error.http_code === 404) {
+        return res.json({ message: "File already deleted" });
+      }
+      console.error("Error checking resource:", error);
+      throw error;
+    }
+
+    const result = await cloudinary.uploader.destroy(publicId, {
+      resource_type: resourceType,
+    });
+
+    if (result.result === "ok") {
+      res.json({ message: "File deleted successfully" });
+    } else {
+      throw new Error("Failed to delete file from Cloudinary");
+    }
+  } catch (error) {
+    console.error("Error in deleteFile:", error);
+    res.status(500).json({
+      error: "Internal server error",
+      message: error.message,
+      details: error.toString(),
+    });
   }
 });
 

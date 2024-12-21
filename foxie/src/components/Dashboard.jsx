@@ -3,6 +3,11 @@ import { Routes, Route } from "react-router-dom";
 import Sidebar from "./Sidebar";
 import DashboardContent from "./DashboardContent";
 import Chatbot from "./Chatbot";
+import Calendar from "./Calendar";
+import Notes from "./Notes"; 
+import Assignments from "./Assignments"; 
+import Courses from "./Courses"; 
+
 
 const Dashboard = () => {
   const [isSidebarExpanded, setSidebarExpanded] = useState(true);
@@ -28,6 +33,17 @@ const Dashboard = () => {
         <Routes>
           {/* Default dashboard route */}
           <Route index element={<DashboardContent />} />
+          {/* Calendar Route */}
+          <Route path="calendar" element={<Calendar />} />
+
+          {/* Notes Route */}
+          <Route path="notes" element={<Notes />} />
+
+          {/* Assignments Route */}
+          <Route path="assignments" element={<Assignments />} />
+
+          {/* Courses Route */}
+          <Route path="courses" element={<Courses />} />
           
           {/* Nested Chatbot routes */}
           <Route path="chatbot">
