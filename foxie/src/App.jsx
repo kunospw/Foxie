@@ -1,18 +1,30 @@
 import React from "react";
-import { BrowserRouter as Router, Route, Routes } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import AuthForm from "./components/AuthForm";
 import Dashboard from "./components/Dashboard";
+import { AuthProvider } from "./context/AuthContext"; // Import from src/context
+import ProtectedRoute from "./components/ProtectedRoute"; // Import from components
 
 const App = () => {
   return (
-    <Router>
-      <div className="min-h-screen bg-gray-800 flex items-center justify-center">
+    <AuthProvider>
+      <Router>
         <Routes>
+          {/* Public Route */}
           <Route path="/" element={<AuthForm />} />
-          <Route path="/dashboard" element={<Dashboard />} />
+
+          {/* Protected Route */}
+          <Route
+            path="/dashboard/*"
+            element={
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
+            }
+          />
         </Routes>
-      </div>
-    </Router>
+      </Router>
+    </AuthProvider>
   );
 };
 
