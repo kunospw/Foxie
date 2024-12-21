@@ -25,6 +25,7 @@ const Sidebar = forwardRef(({ isSidebarExpanded, toggleSidebar }, ref) => {
   const [isSessionsDropdownOpen, setIsSessionsDropdownOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
+  const API_URL = import.meta.env.VITE_API_URL;
 
  // Expose methods to parent components
  useImperativeHandle(ref, () => ({
