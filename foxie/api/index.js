@@ -5,6 +5,8 @@ import axios from "axios";
 import { v2 as cloudinary } from "cloudinary";
 import admin from "firebase-admin";
 
+let db;
+
 const DEFAULT_SESSION_NAME = "New Session";
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const CHAT_MODEL = "gpt-4";
@@ -23,7 +25,7 @@ const validateFileSize = (fileSize) => {
   return fileSize <= MAX_FILE_SIZE;
 };
 // Initialize Firebase Admin
-// Initialize Firebase Admin
+
 if (!admin.apps.length) {
   try {
     const safeParseEnvJSON = (envVar, varName) => {
@@ -51,6 +53,8 @@ if (!admin.apps.length) {
     admin.initializeApp({
       credential: admin.credential.cert(serviceAccount),
     });
+
+    // Initialize Firestore database
     db = admin.firestore();
     console.info("Firebase Admin SDK initialized successfully.");
   } catch (error) {
