@@ -4,7 +4,8 @@ import express from "express";
 import axios from "axios";
 import { v2 as cloudinary } from "cloudinary";
 import admin from "firebase-admin";
-
+const app = express();
+app.use(express.json());
 let db;
 
 const DEFAULT_SESSION_NAME = "New Session";
