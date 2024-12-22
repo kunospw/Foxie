@@ -22,20 +22,25 @@ cloudinary.config({
 const app = express();
 app.use(express.json());
 const allowedOrigins = [
-  "http://localhost:3000", // Allow during development
-  "https://foxie-iota.vercel.app", // Your Vercel frontend URL
+  "http://localhost:3000",
+  "http://localhost:5173",
+  "http://localhost:4173",
+  "https://foxie-iota.vercel.app",
 ];
 
-// Dynamically check origin
 app.use(
   cors({
-    origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true); // Allow the request
-      } else {
-        callback(new Error("Not allowed by CORS")); // Block the request
+    origin: function (origin, callback) {
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
       }
+      const msg =
+        "The CORS policy for this site does not allow access from the specified origin.";
+      console.error(`Blocked by CORS: ${origin}`);
+      return callback(new Error(msg), false);
     },
+    credentials: true,
   })
 );
 
@@ -142,8 +147,6 @@ app.post("/api/chat", async (req, res) => {
 app.get("/api/sessions", async (req, res) => {
   const { userId } = req.query;
 
-  console.log("Received userId:", userId); // Debug log
-
   if (!userId) {
     return res.status(400).json({ error: "User ID is required." });
   }
@@ -162,17 +165,16 @@ app.get("/api/sessions", async (req, res) => {
       ...doc.data(),
     }));
 
-    console.log("Fetched sessions:", sessions); // Debug log
-
     res.json(sessions);
   } catch (error) {
-    console.error("Detailed error fetching sessions:", error);
+    console.error("Error fetching sessions:", error);
     res.status(500).json({
       error: "Failed to fetch sessions",
       details: error.message,
     });
   }
 });
+
 // Route to fetch a single session by ID
 app.get("/api/sessions/:sessionId", async (req, res) => {
   const { userId } = req.query;
@@ -314,19 +316,18 @@ app.post("/api/notes/sync", async (req, res) => {
 });
 
 app.post("/api/deleteFile", async (req, res) => {
+  const { publicId, resourceType = "auto" } = req.body;
+
   try {
-    const { publicId, resourceType = "auto" } = req.body;
+    console.log("Attempting to delete:", { publicId, resourceType });
 
-    console.log("Attempting to delete:", { publicId, resourceType }); // Add logging
-
-    // Verify the file exists before attempting deletion
     try {
       await cloudinary.api.resource(publicId, { resource_type: resourceType });
     } catch (error) {
       if (error.http_code === 404) {
-        return res.json({ message: "File already deleted" });
+        console.warn("File not found, skipping deletion.");
+        return res.json({ message: "File not found, no action taken." });
       }
-      console.error("Error checking resource:", error);
       throw error;
     }
 
@@ -335,19 +336,28 @@ app.post("/api/deleteFile", async (req, res) => {
     });
 
     if (result.result === "ok") {
-      res.json({ message: "File deleted successfully" });
-    } else {
-      throw new Error("Failed to delete file from Cloudinary");
+      return res.json({ message: "File deleted successfully" });
     }
+
+    throw new Error("Failed to delete file from Cloudinary");
   } catch (error) {
     console.error("Error in deleteFile:", error);
     res.status(500).json({
       error: "Internal server error",
-      message: error.message,
-      details: error.toString(),
+      details: error.message,
     });
   }
+});
+app.use((err, req, res, next) => {
+  console.error("Unhandled Error:", err);
+  res
+    .status(500)
+    .json({ error: "Internal Server Error", details: err.message });
 });
 
 // Start the server
 console.log("API server is ready for Vercel deployment!");
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
+});

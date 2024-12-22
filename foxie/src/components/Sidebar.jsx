@@ -51,23 +51,26 @@ const Sidebar = forwardRef(({ isSidebarExpanded, toggleSidebar }, ref) => {
     }
     try {
       setIsLoading(true);
-      console.log("Fetching sessions for user:", user.uid); // Debug log
+      console.log("Fetching sessions for user:", user.uid);
+      console.log("Using API URL:", `${API_URL}/api/sessions`);
       const response = await axios.get(`${API_URL}/api/sessions`, {
         params: { userId: user.uid },
       });
-      console.log("Sessions response:", response.data); // Debug log
+      console.log("Sessions response:", response.data);
       setSessions(
         response.data.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
       );
       setError(null);
     } catch (error) {
-      console.error("Detailed error fetching sessions:", error);
+      console.error("Error fetching sessions:", error);
+      console.error("Error details:", error.response?.data || error.message);
       setError(`Failed to load sessions: ${error.response?.data?.error || error.message}`);
       setSessions([]);
     } finally {
       setIsLoading(false);
     }
   }, [user]);
+  
 
   React.useEffect(() => {
     fetchSessions();
