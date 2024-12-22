@@ -357,7 +357,4 @@ app.use((err, req, res, next) => {
 
 // Start the server
 console.log("API server is ready for Vercel deployment!");
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-});
+module.exports = app;
