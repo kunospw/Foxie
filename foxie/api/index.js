@@ -1,51 +1,49 @@
+// api/index.js
 import express from "express";
 import axios from "axios";
-import cors from "cors";
 import { v2 as cloudinary } from "cloudinary";
 import admin from "firebase-admin";
-import dotenv from "dotenv";
-import fs from "fs";
-import { fileURLToPath } from "url";
-import { dirname, resolve } from "path";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const DEFAULT_SESSION_NAME = "New Session";
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const CHAT_MODEL = "gpt-4";
+const MAX_TOKENS = 150;
+const TEMPERATURE = 0.7;
 
-dotenv.config({ path: resolve(__dirname, "../.env") });
-console.log("Environment Variables Loaded:", process.env.OPENAI_API_KEY);
+const getResourceType = (fileType) => {
+  if (fileType === "application/pdf" || fileType.includes("application/")) {
+    return "raw";
+  }
+  return "image";
+};
+
+const validateFileSize = (fileSize) => {
+  return fileSize <= MAX_FILE_SIZE;
+};
+// Initialize Firebase Admin
+let db;
+if (!admin.apps.length) {
+  const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+  });
+  db = admin.firestore();
+}
+
 // Configure Cloudinary
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
+
 const app = express();
 app.use(express.json());
 
-const allowedOrigins = [
-  "http://localhost:3000",
-  "http://localhost:5173",
-  "http://localhost:4173",
-];
-
-app.use(
-  cors({
-    origin: function (origin, callback) {
-      if (!origin) return callback(null, true);
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-      const msg =
-        "The CORS policy for this site does not allow access from the specified origin.";
-      console.error(`Blocked by CORS: ${origin}`);
-      return callback(new Error(msg), false);
-    },
-    credentials: true,
-  })
-);
+// Helper function for checking file existence
 async function checkFileExists(publicId, resourceType = "auto") {
   try {
-    const result = await cloudinary.api.resource(publicId, {
+    await cloudinary.api.resource(publicId, {
       resource_type: resourceType,
     });
     return true;
@@ -57,16 +55,7 @@ async function checkFileExists(publicId, resourceType = "auto") {
   }
 }
 
-// Load Firebase service account key dynamically
-const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-});
-
-const db = admin.firestore();
-
-// Route to handle chat and update a session
+// Chat endpoint
 app.post("/api/chat", async (req, res) => {
   const { sessionId, prompt, messages, userId } = req.body;
 
@@ -89,7 +78,7 @@ app.post("/api/chat", async (req, res) => {
     const response = await axios.post(
       "https://api.openai.com/v1/chat/completions",
       {
-        model: "gpt-4",
+        model: CHAT_MODEL,
         messages: [
           { role: "system", content: "You are a helpful assistant." },
           ...messages.map((msg) => ({
@@ -98,8 +87,8 @@ app.post("/api/chat", async (req, res) => {
           })),
           { role: "user", content: prompt },
         ],
-        max_tokens: 150,
-        temperature: 0.7,
+        max_tokens: MAX_TOKENS,
+        temperature: TEMPERATURE,
       },
       {
         headers: {
@@ -110,41 +99,40 @@ app.post("/api/chat", async (req, res) => {
     );
 
     const botReply = response.data.choices[0].message.content.trim();
+    const userMessageId = crypto.randomUUID();
+    const botMessageId = crypto.randomUUID();
 
-    // Prepare updated session data
     const updatedSessionData = {
       id: sessionId,
-      name: messages.length === 0 ? prompt : sessionDoc.data().name || prompt,
+      name:
+        messages.length === 0 && !sessionDoc.data().isFirstEverSession
+          ? prompt
+          : sessionDoc.data().name || DEFAULT_SESSION_NAME,
       messages: [
         ...messages,
-        { role: "user", content: prompt },
-        { role: "assistant", content: botReply },
+        { role: "user", content: prompt, id: userMessageId },
+        { role: "assistant", content: botReply, id: botMessageId },
       ],
       updatedAt: admin.firestore.Timestamp.now(),
     };
 
-    // Update the session in Firestore
-    await sessionRef.update({
-      messages: updatedSessionData.messages,
-      name: updatedSessionData.name,
-      updatedAt: updatedSessionData.updatedAt,
-    });
+    await sessionRef.update(updatedSessionData);
 
     res.json({
       botReply,
       session: updatedSessionData,
     });
   } catch (error) {
-    console.error("Error:", error.stack || error);
+    console.error("Error:", error);
     res
       .status(500)
       .json({ error: "Internal server error", details: error.message });
   }
 });
 
-// Route to fetch user's sessions
-app.get("/api/sessions", async (req, res) => {
-  const { userId } = req.query;
+// Sessions endpoints
+app.post("/api/sessions", async (req, res) => {
+  const { userId } = req.body;
 
   if (!userId) {
     return res.status(400).json({ error: "User ID is required." });
@@ -155,26 +143,34 @@ app.get("/api/sessions", async (req, res) => {
       .collection("users")
       .doc(userId)
       .collection("chatSessions")
-      .orderBy("updatedAt", "desc")
-      .limit(10)
+      .limit(1)
       .get();
 
-    const sessions = sessionsSnapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    }));
+    const isFirstEverSession = sessionsSnapshot.empty;
 
-    res.json(sessions);
+    const newSession = {
+      name: DEFAULT_SESSION_NAME,
+      createdAt: admin.firestore.Timestamp.now(),
+      updatedAt: admin.firestore.Timestamp.now(),
+      isFirstEverSession,
+      messages: [],
+    };
+
+    const sessionRef = await db
+      .collection("users")
+      .doc(userId)
+      .collection("chatSessions")
+      .add(newSession);
+
+    res.status(201).json({ id: sessionRef.id, ...newSession });
   } catch (error) {
-    console.error("Error fetching sessions:", error);
     res.status(500).json({
-      error: "Failed to fetch sessions",
+      error: "Failed to create a session.",
       details: error.message,
     });
   }
 });
 
-// Route to fetch a single session by ID
 app.get("/api/sessions/:sessionId", async (req, res) => {
   const { userId } = req.query;
   const { sessionId } = req.params;
@@ -186,13 +182,12 @@ app.get("/api/sessions/:sessionId", async (req, res) => {
   }
 
   try {
-    const sessionRef = db
+    const sessionDoc = await db
       .collection("users")
       .doc(userId)
       .collection("chatSessions")
-      .doc(sessionId);
-
-    const sessionDoc = await sessionRef.get();
+      .doc(sessionId)
+      .get();
 
     if (!sessionDoc.exists) {
       return res.status(404).json({ error: "Session not found" });
@@ -200,14 +195,13 @@ app.get("/api/sessions/:sessionId", async (req, res) => {
 
     res.json({ id: sessionDoc.id, ...sessionDoc.data() });
   } catch (error) {
-    console.error("Error fetching single session:", error);
     res.status(500).json({
       error: "Failed to fetch session",
       details: error.message,
     });
   }
 });
-// Route to create a new session
+
 app.post("/api/sessions", async (req, res) => {
   const { userId } = req.body;
 
@@ -230,10 +224,10 @@ app.post("/api/sessions", async (req, res) => {
 
     res.status(201).json({ id: sessionRef.id, ...newSession });
   } catch (error) {
-    console.error("Error creating session:", error.message);
     res.status(500).json({ error: "Failed to create a session." });
   }
 });
+
 app.delete("/api/sessions/:sessionId", async (req, res) => {
   const { userId } = req.query;
   const { sessionId } = req.params;
@@ -251,23 +245,22 @@ app.delete("/api/sessions/:sessionId", async (req, res) => {
       .collection("chatSessions")
       .doc(sessionId);
 
-    // Check if session exists before deleting
     const sessionDoc = await sessionRef.get();
     if (!sessionDoc.exists) {
       return res.status(404).json({ error: "Session not found" });
     }
 
     await sessionRef.delete();
-
     res.status(200).json({ message: "Session deleted successfully" });
   } catch (error) {
-    console.error("Error deleting session:", error.message);
-    res
-      .status(500)
-      .json({ error: "Failed to delete session", details: error.message });
+    res.status(500).json({
+      error: "Failed to delete session",
+      details: error.message,
+    });
   }
 });
-// In your server code
+
+// Notes endpoints
 app.post("/api/notes/sync", async (req, res) => {
   const { userId } = req.body;
 
@@ -309,23 +302,32 @@ app.post("/api/notes/sync", async (req, res) => {
 
     res.json(syncResults);
   } catch (error) {
-    console.error("Error syncing notes:", error);
     res.status(500).json({ error: "Failed to sync notes" });
   }
 });
 
 app.post("/api/deleteFile", async (req, res) => {
-  const { publicId, resourceType = "auto" } = req.body;
+  const { publicId, fileType, fileSize } = req.body;
 
   try {
-    console.log("Attempting to delete:", { publicId, resourceType });
+    // Validate file size if provided
+    if (fileSize && !validateFileSize(fileSize)) {
+      return res.status(400).json({
+        error: "File size exceeds limit",
+        details: "Maximum file size is 10MB",
+      });
+    }
+
+    const resourceType = getResourceType(fileType);
 
     try {
       await cloudinary.api.resource(publicId, { resource_type: resourceType });
     } catch (error) {
       if (error.http_code === 404) {
-        console.warn("File not found, skipping deletion.");
-        return res.json({ message: "File not found, no action taken." });
+        return res.json({
+          status: "success",
+          message: "File not found, no action taken",
+        });
       }
       throw error;
     }
@@ -335,33 +337,33 @@ app.post("/api/deleteFile", async (req, res) => {
     });
 
     if (result.result === "ok") {
-      return res.json({ message: "File deleted successfully" });
+      return res.json({
+        status: "success",
+        message: "File deleted successfully",
+      });
     }
 
     throw new Error("Failed to delete file from Cloudinary");
   } catch (error) {
-    console.error("Error in deleteFile:", error);
     res.status(500).json({
-      error: "Internal server error",
+      error: "Failed to delete file",
       details: error.message,
     });
   }
 });
+
+// Error handler
 app.use((err, req, res, next) => {
   console.error("Unhandled Error:", err);
-  res
-    .status(500)
-    .json({ error: "Internal Server Error", details: err.message });
+  const errorMessage =
+    err.code === "ECONNABORTED"
+      ? "Request timed out. Please try again."
+      : err.message || "Internal Server Error";
+
+  res.status(500).json({
+    error: "Internal Server Error",
+    details: errorMessage,
+  });
 });
 
-// For local development
-if (process.env.NODE_ENV !== "production") {
-  const PORT = process.env.PORT || 3000;
-  app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
-  });
-}
-
-// Start the server
-console.log("API server is ready for Vercel deployment!");
 export default app;

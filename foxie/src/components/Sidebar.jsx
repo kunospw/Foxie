@@ -16,6 +16,10 @@ import {
   BookIcon,
 } from "lucide-react";
 
+// Constants
+const DEFAULT_SESSION_NAME = "Unnamed Session";
+const API_TIMEOUT = 10000; // 10 seconds
+
 const Sidebar = forwardRef(({ isSidebarExpanded, toggleSidebar }, ref) => {
   const { user, logout } = useAuth();
   const [sessions, setSessions] = useState([]);
@@ -25,25 +29,21 @@ const Sidebar = forwardRef(({ isSidebarExpanded, toggleSidebar }, ref) => {
   const [isSessionsDropdownOpen, setIsSessionsDropdownOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
-  const API_URL = import.meta.env.VITE_API_URL;
 
- // Expose methods to parent components
- useImperativeHandle(ref, () => ({
-  removeSessionFromList: (sessionId) => {
-    setSessions((currentSessions) =>
-      currentSessions.filter((session) => session.id !== sessionId)
-    );
-  },
-  addSessionToList: (newSession) => {
-    setSessions((currentSessions) => [
-      newSession,
-      ...currentSessions
-    ]);
-  },
-  getSessions: () => sessions,
-}));
+  // Expose methods to parent components
+  useImperativeHandle(ref, () => ({
+    removeSessionFromList: (sessionId) => {
+      setSessions((currentSessions) =>
+        currentSessions.filter((session) => session.id !== sessionId)
+      );
+    },
+    addSessionToList: (newSession) => {
+      setSessions((currentSessions) => [newSession, ...currentSessions]);
+    },
+    getSessions: () => sessions,
+  }));
 
-  // Fetch user sessions (keep existing implementation)
+  // Fetch user sessions with error boundary and timeout
   const fetchSessions = React.useCallback(async () => {
     if (!user) {
       setIsLoading(false);
@@ -51,55 +51,56 @@ const Sidebar = forwardRef(({ isSidebarExpanded, toggleSidebar }, ref) => {
     }
     try {
       setIsLoading(true);
-      console.log("Fetching sessions for user:", user.uid);
-      console.log("Using API URL:", `${API_URL}/api/sessions`);
-      const response = await axios.get(`${API_URL}/api/sessions`, {
+      const response = await axios.get('/api/sessions', {
         params: { userId: user.uid },
+        timeout: API_TIMEOUT,
       });
-      console.log("Sessions response:", response.data);
+      
       setSessions(
         response.data.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
       );
       setError(null);
     } catch (error) {
-      console.error("Error fetching sessions:", error);
-      console.error("Error details:", error.response?.data || error.message);
-      setError(`Failed to load sessions: ${error.response?.data?.error || error.message}`);
+      const errorMessage = error.code === 'ECONNABORTED' 
+        ? 'Request timed out. Please try again.'
+        : `Failed to load sessions: ${error.response?.data?.error || error.message}`;
+      setError(errorMessage);
       setSessions([]);
     } finally {
       setIsLoading(false);
     }
   }, [user]);
-  
 
   React.useEffect(() => {
     fetchSessions();
   }, [fetchSessions]);
 
-  // Create a new chat session
-const createNewSession = async (e) => {
-  e.stopPropagation(); // Prevent bubbling
-  if (!user) return;
-  try {
-    setIsLoading(true);
-    const response = await axios.post(`${API_URL}/api/sessions`, {
-      userId: user.uid,
-    });
+  // Create a new chat session with error handling
+  const createNewSession = async (e) => {
+    e.stopPropagation();
+    if (!user) return;
     
-    // Immediately fetch updated sessions to ensure list is current
-    await fetchSessions();
-    
-    // Navigate to the new session
-    navigate(`/dashboard/chatbot/${response.data.id}`);
-  } catch (error) {
-    console.error("Error creating new session:", error.message);
-    setError("Failed to create a new session. Please try again.");
-  } finally {
-    setIsLoading(false);
-  }
-};
+    try {
+      setIsLoading(true);
+      const response = await axios.post(
+        '/api/sessions', 
+        { userId: user.uid },
+        { timeout: API_TIMEOUT }
+      );
+      
+      await fetchSessions();
+      navigate(`/dashboard/chatbot/${response.data.id}`);
+    } catch (error) {
+      const errorMessage = error.code === 'ECONNABORTED'
+        ? 'Request timed out. Please try again.'
+        : 'Failed to create a new session. Please try again.';
+      setError(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-  // Handle logout
+  // Handle logout with error boundary
   const handleLogout = async () => {
     if (window.confirm("Are you sure you want to log out?")) {
       try {
@@ -107,6 +108,7 @@ const createNewSession = async (e) => {
         window.location.href = "/";
       } catch (error) {
         console.error("Logout failed:", error.message);
+        setError("Logout failed. Please try again.");
       }
     }
   };
@@ -116,12 +118,22 @@ const createNewSession = async (e) => {
     setIsSessionsDropdownOpen(!isSessionsDropdownOpen);
   };
 
-  // Render session list
+  // Render session list with improved error handling
   const renderSessionList = () => {
     if (isLoading)
       return <div className="text-gray-400 px-4 py-2">Loading sessions...</div>;
     if (error)
-      return <div className="text-red-500 px-4 py-2">{error}</div>;
+      return (
+        <div className="text-red-500 px-4 py-2">
+          {error}
+          <button 
+            onClick={() => fetchSessions()}
+            className="ml-2 text-sm underline hover:text-red-400"
+          >
+            Retry
+          </button>
+        </div>
+      );
     if (sessions.length === 0)
       return <div className="text-gray-400 px-4 py-2">No sessions found</div>;
 
@@ -135,11 +147,15 @@ const createNewSession = async (e) => {
               : ""
           }`}
         >
-          {session.name || "Unnamed Session"}
+          {session.name || DEFAULT_SESSION_NAME}
+          {session.isFirstEverSession && (
+            <span className="ml-2 text-xs bg-blue-500 text-white px-2 py-1 rounded">New</span>
+          )}
         </Link>
       </li>
     ));
   };
+
   return (
     <div
       className={`bg-gray-900 shadow-2xl transition-all duration-300 ease-in-out fixed inset-y-0 left-0 z-30 ${

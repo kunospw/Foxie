@@ -42,8 +42,6 @@ const Chatbot = ({ isSidebarExpanded, sidebarRef }) => {
   const [hoveredMessageIndex, setHoveredMessageIndex] = useState(null);
   const [isFirstEverSession, setIsFirstEverSession] = useState(false);
 
-  const API_URL = import.meta.env.VITE_API_URL;
-
 
   // Error handler
   const handleError = useCallback((error) => {
@@ -71,7 +69,7 @@ const Chatbot = ({ isSidebarExpanded, sidebarRef }) => {
     if (!user) return navigate("/login");
     try {
       setIsCreatingSession(true);
-      const response = await axios.post(`${API_URL}/api/sessions`, {
+      const response = await axios.post('/api/sessions', {
         userId: user.uid,
       });
 
@@ -100,7 +98,7 @@ const Chatbot = ({ isSidebarExpanded, sidebarRef }) => {
       setIsDeletingSession(true);
       
       // Delete session from backend
-      await axios.delete(`${API_URL}/api/sessions/${currentSessionId}`, {
+      await axios.delete(`/api/sessions/${currentSessionId}`, {
         params: { userId: user.uid }
       });
   
@@ -206,7 +204,7 @@ useEffect(() => {
         content: msg.text,
       }));
   
-      const response = await axios.post(`${API_URL}/api/chat`, {
+      const response = await axios.post('/api/chat', {
         sessionId: currentSessionId,
         prompt: lastUserMessage.text,
         messages: firestoreMessages,
@@ -289,7 +287,7 @@ useEffect(() => {
       ];
   
       // Call AI API
-      const response = await axios.post(`${API_URL}/api/chat`, {
+      const response = await axios.post('/api/chat', {
         sessionId: currentSessionId,
         prompt: userInput,
         messages: firestoreMessages,
@@ -325,7 +323,7 @@ useEffect(() => {
 
         // Only add to sidebar if it's the first ever session
         if (isFirstEverSession && sidebarRef?.current?.addSessionToList) {
-          const updatedSession = await axios.get(`${API_URL}/api/sessions/${currentSessionId}`, {
+          const updatedSession = await axios.get(`/api/sessions/${currentSessionId}`, {
             params: { userId: user.uid }
           });
           sidebarRef.current.addSessionToList(updatedSession.data);

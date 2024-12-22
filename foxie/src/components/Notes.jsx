@@ -5,10 +5,11 @@ import { useAuth } from "../context/AuthContext";
 import { Loader2, Upload, Trash2, RefreshCw } from "lucide-react";
 import Swal from 'sweetalert2';
 
-const CLOUDINARY_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${import.meta.env.CLOUDINARY_CLOUD_NAME}`;
-const UPLOAD_PRESET = import.meta.env.VITE_UPLOAD_PRESET;
+const CLOUDINARY_CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
+const CLOUDINARY_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}`;
+const UPLOAD_PRESET = process.env.NEXT_PUBLIC_UPLOAD_PRESET;
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || '';
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 const validateFile = (file) => {
   if (!file) return "Please select a file";
@@ -206,7 +207,7 @@ const Notes = () => {
     if (!result.isConfirmed) return;
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/deleteFile`, {
+      const response = await fetch('/api/deleteFile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -246,7 +247,7 @@ const Notes = () => {
     setIsSyncing(true);
     
     try {
-      const response = await fetch(`${API_BASE_URL}/api/notes/sync`, {
+      const response = await fetch('/api/notes/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: user.uid }),
