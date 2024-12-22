@@ -6,13 +6,12 @@ export default defineConfig({
   server: {
     proxy: {
       "/api": {
-        target: "http://localhost:3000",
+        target: "http://localhost:3000", // Local backend URL
         changeOrigin: true,
         secure: false,
-        rewrite: (path) => path.replace(/^\/api/, "/api"),
+        rewrite: (path) => path.replace(/^\/api/, "/api"), // Ensures the `/api` prefix remains
       },
     },
   },
-  // Add base URL configuration
-  base: "/",
+  base: "/", // Ensures paths resolve correctly
 });
