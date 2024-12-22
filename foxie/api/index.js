@@ -21,6 +21,7 @@ cloudinary.config({
 });
 const app = express();
 app.use(express.json());
+
 const allowedOrigins = [
   "http://localhost:3000",
   "http://localhost:5173",
@@ -43,7 +44,6 @@ app.use(
     credentials: true,
   })
 );
-
 async function checkFileExists(publicId, resourceType = "auto") {
   try {
     const result = await cloudinary.api.resource(publicId, {
@@ -355,6 +355,14 @@ app.use((err, req, res, next) => {
     .json({ error: "Internal Server Error", details: err.message });
 });
 
+// For local development
+if (process.env.NODE_ENV !== "production") {
+  const PORT = process.env.PORT || 3000;
+  app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+  });
+}
+
 // Start the server
 console.log("API server is ready for Vercel deployment!");
-module.exports = app;
+export default app;
