@@ -24,29 +24,30 @@ const validateFileSize = (fileSize) => {
 };
 // Initialize Firebase Admin
 // Initialize Firebase Admin
-let db;
 if (!admin.apps.length) {
   try {
-    if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
-      throw new Error("Missing FIREBASE_SERVICE_ACCOUNT environment variable.");
-    }
-
-    // Utility function to parse environment variables safely
-    const parseEnvJSON = (envVar, varName) => {
+    const safeParseEnvJSON = (envVar, varName) => {
       try {
-        return JSON.parse(envVar);
+        const parsed = JSON.parse(envVar);
+        console.log(`${varName} parsed successfully.`);
+        return parsed;
       } catch (error) {
-        throw new Error(`Failed to parse ${varName}: ${error.message}`);
+        console.error(`Failed to parse ${varName}:`, error.message);
+        throw error;
       }
     };
 
-    // Parse the service account JSON
-    const serviceAccount = parseEnvJSON(
+    const serviceAccount = safeParseEnvJSON(
       process.env.FIREBASE_SERVICE_ACCOUNT,
       "FIREBASE_SERVICE_ACCOUNT"
     );
 
-    // Initialize Firebase Admin SDK
+    // Ensure the private key is formatted correctly
+    serviceAccount.private_key = serviceAccount.private_key.replace(
+      /\\n/g,
+      "\n"
+    );
+
     admin.initializeApp({
       credential: admin.credential.cert(serviceAccount),
     });
@@ -54,7 +55,7 @@ if (!admin.apps.length) {
     console.info("Firebase Admin SDK initialized successfully.");
   } catch (error) {
     console.error("Firebase Admin SDK Initialization Error:", error.message);
-    process.exit(1); // Stop the server if Firebase fails to initialize
+    process.exit(1);
   }
 }
 
