@@ -23,6 +23,7 @@ const validateFileSize = (fileSize) => {
   return fileSize <= MAX_FILE_SIZE;
 };
 // Initialize Firebase Admin
+// Initialize Firebase Admin
 let db;
 if (!admin.apps.length) {
   try {
@@ -30,14 +31,30 @@ if (!admin.apps.length) {
       throw new Error("Missing FIREBASE_SERVICE_ACCOUNT environment variable.");
     }
 
-    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+    // Utility function to parse environment variables safely
+    const parseEnvJSON = (envVar, varName) => {
+      try {
+        return JSON.parse(envVar);
+      } catch (error) {
+        throw new Error(`Failed to parse ${varName}: ${error.message}`);
+      }
+    };
+
+    // Parse the service account JSON
+    const serviceAccount = parseEnvJSON(
+      process.env.FIREBASE_SERVICE_ACCOUNT,
+      "FIREBASE_SERVICE_ACCOUNT"
+    );
+
+    // Initialize Firebase Admin SDK
     admin.initializeApp({
       credential: admin.credential.cert(serviceAccount),
     });
     db = admin.firestore();
+    console.info("Firebase Admin SDK initialized successfully.");
   } catch (error) {
-    console.error("Failed to initialize Firebase Admin SDK:", error.message);
-    process.exit(1);
+    console.error("Firebase Admin SDK Initialization Error:", error.message);
+    process.exit(1); // Stop the server if Firebase fails to initialize
   }
 }
 
