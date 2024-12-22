@@ -1,4 +1,5 @@
 // api/index.js
+import dotenv from "dotenv";
 import express from "express";
 import axios from "axios";
 import { v2 as cloudinary } from "cloudinary";
@@ -16,6 +17,7 @@ const getResourceType = (fileType) => {
   }
   return "image";
 };
+dotenv.config();
 
 const validateFileSize = (fileSize) => {
   return fileSize <= MAX_FILE_SIZE;
@@ -23,15 +25,20 @@ const validateFileSize = (fileSize) => {
 // Initialize Firebase Admin
 let db;
 if (!admin.apps.length) {
-  if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
-    console.error("Missing FIREBASE_SERVICE_ACCOUNT environment variable.");
-    process.exit(1); // Exit app if environment variable is missing
+  try {
+    if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
+      throw new Error("Missing FIREBASE_SERVICE_ACCOUNT environment variable.");
+    }
+
+    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount),
+    });
+    db = admin.firestore();
+  } catch (error) {
+    console.error("Failed to initialize Firebase Admin SDK:", error.message);
+    process.exit(1);
   }
-  const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-  });
-  db = admin.firestore();
 }
 
 // Configure Cloudinary
@@ -144,13 +151,13 @@ app.post("/api/sessions", async (req, res) => {
   const { userId } = req.body;
 
   if (!userId) {
+    console.warn("Missing userId in request body");
     return res.status(400).json({ error: "User ID is required." });
   }
 
   try {
-    const sessionsSnapshot = await db
-      .collection("users")
-      .doc(userId)
+    const userRef = db.collection("users").doc(userId);
+    const sessionsSnapshot = await userRef
       .collection("chatSessions")
       .limit(1)
       .get();
@@ -165,14 +172,14 @@ app.post("/api/sessions", async (req, res) => {
       messages: [],
     };
 
-    const sessionRef = await db
-      .collection("users")
-      .doc(userId)
-      .collection("chatSessions")
-      .add(newSession);
+    const sessionRef = await userRef.collection("chatSessions").add(newSession);
 
+    console.info(
+      `Session created successfully for userId: ${userId}, sessionId: ${sessionRef.id}`
+    );
     res.status(201).json({ id: sessionRef.id, ...newSession });
   } catch (error) {
+    console.error("Failed to create session for userId:", userId, error);
     res.status(500).json({
       error: "Failed to create a session.",
       details: error.message,
