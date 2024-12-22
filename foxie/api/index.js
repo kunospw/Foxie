@@ -23,6 +23,10 @@ const validateFileSize = (fileSize) => {
 // Initialize Firebase Admin
 let db;
 if (!admin.apps.length) {
+  if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
+    console.error("Missing FIREBASE_SERVICE_ACCOUNT environment variable.");
+    process.exit(1); // Exit app if environment variable is missing
+  }
   const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
@@ -31,15 +35,20 @@ if (!admin.apps.length) {
 }
 
 // Configure Cloudinary
+if (
+  !process.env.CLOUDINARY_CLOUD_NAME ||
+  !process.env.CLOUDINARY_API_KEY ||
+  !process.env.CLOUDINARY_API_SECRET
+) {
+  console.error("Missing Cloudinary environment variables.");
+  process.exit(1);
+}
+
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
-
-const app = express();
-app.use(express.json());
-
 // Helper function for checking file existence
 async function checkFileExists(publicId, resourceType = "auto") {
   try {
@@ -171,6 +180,39 @@ app.post("/api/sessions", async (req, res) => {
   }
 });
 
+app.get("/api/sessions", async (req, res) => {
+  const { userId } = req.query;
+
+  if (!userId) {
+    return res.status(400).json({ error: "User ID is required." });
+  }
+
+  try {
+    const sessionsSnapshot = await db
+      .collection("users")
+      .doc(userId)
+      .collection("chatSessions")
+      .orderBy("updatedAt", "desc")
+      .get();
+
+    const sessions = [];
+    sessionsSnapshot.forEach((doc) => {
+      sessions.push({
+        id: doc.id,
+        ...doc.data(),
+      });
+    });
+
+    res.json(sessions);
+  } catch (error) {
+    console.error("Error fetching sessions:", error);
+    res.status(500).json({
+      error: "Failed to fetch sessions",
+      details: error.message,
+    });
+  }
+});
+
 app.get("/api/sessions/:sessionId", async (req, res) => {
   const { userId } = req.query;
   const { sessionId } = req.params;
@@ -199,32 +241,6 @@ app.get("/api/sessions/:sessionId", async (req, res) => {
       error: "Failed to fetch session",
       details: error.message,
     });
-  }
-});
-
-app.post("/api/sessions", async (req, res) => {
-  const { userId } = req.body;
-
-  if (!userId) {
-    return res.status(400).json({ error: "User ID is required." });
-  }
-
-  try {
-    const newSession = {
-      name: "New Chat Session",
-      createdAt: admin.firestore.Timestamp.now(),
-      updatedAt: admin.firestore.Timestamp.now(),
-    };
-
-    const sessionRef = await db
-      .collection("users")
-      .doc(userId)
-      .collection("chatSessions")
-      .add(newSession);
-
-    res.status(201).json({ id: sessionRef.id, ...newSession });
-  } catch (error) {
-    res.status(500).json({ error: "Failed to create a session." });
   }
 });
 
@@ -354,15 +370,14 @@ app.post("/api/deleteFile", async (req, res) => {
 
 // Error handler
 app.use((err, req, res, next) => {
-  console.error("Unhandled Error:", err);
-  const errorMessage =
-    err.code === "ECONNABORTED"
-      ? "Request timed out. Please try again."
-      : err.message || "Internal Server Error";
-
+  console.error("Unhandled Error:", {
+    message: err.message,
+    stack: err.stack,
+    route: req.originalUrl,
+  });
   res.status(500).json({
     error: "Internal Server Error",
-    details: errorMessage,
+    details: err.message || "An unexpected error occurred.",
   });
 });
 

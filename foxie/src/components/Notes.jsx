@@ -8,7 +8,6 @@ import Swal from 'sweetalert2';
 const CLOUDINARY_CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
 const CLOUDINARY_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}`;
 const UPLOAD_PRESET = process.env.NEXT_PUBLIC_UPLOAD_PRESET;
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || '';
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
 const validateFile = (file) => {
