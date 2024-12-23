@@ -358,44 +358,50 @@ app.post("/api/notes/sync", async (req, res) => {
 });
 
 app.post("/api/deleteFile", async (req, res) => {
-  const { publicId, fileType, fileSize } = req.body;
+  const { publicId, resourceType = "auto" } = req.body;
+
+  if (!publicId) {
+    return res.status(400).json({
+      error: "publicId is required to delete a file",
+    });
+  }
 
   try {
-    // Validate file size if provided
-    if (fileSize && !validateFileSize(fileSize)) {
-      return res.status(400).json({
-        error: "File size exceeds limit",
-        details: "Maximum file size is 10MB",
-      });
-    }
-
-    const resourceType = getResourceType(fileType);
-
+    // Check if the file exists in Cloudinary
+    let fileExists = true;
     try {
       await cloudinary.api.resource(publicId, { resource_type: resourceType });
     } catch (error) {
       if (error.http_code === 404) {
-        return res.json({
-          status: "success",
-          message: "File not found, no action taken",
-        });
+        fileExists = false;
+      } else {
+        throw error;
       }
-      throw error;
     }
 
+    // If the file doesn't exist, return success without deletion
+    if (!fileExists) {
+      return res.json({
+        status: "success",
+        message: "File not found; nothing to delete.",
+      });
+    }
+
+    // Attempt to delete the file
     const result = await cloudinary.uploader.destroy(publicId, {
       resource_type: resourceType,
     });
 
-    if (result.result === "ok") {
+    if (result.result === "ok" || result.result === "not found") {
       return res.json({
         status: "success",
-        message: "File deleted successfully",
+        message: "File deleted successfully.",
       });
     }
 
-    throw new Error("Failed to delete file from Cloudinary");
+    throw new Error("Failed to delete file from Cloudinary.");
   } catch (error) {
+    console.error("Delete error:", error);
     res.status(500).json({
       error: "Failed to delete file",
       details: error.message,

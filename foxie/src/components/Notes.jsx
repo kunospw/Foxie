@@ -201,42 +201,39 @@ const Notes = () => {
       showCancelButton: true,
       confirmButtonColor: '#f06937',
       cancelButtonColor: '#d33',
-      confirmButtonText: 'Yes, delete it!'
+      confirmButtonText: 'Yes, delete it!',
     });
-
+  
     if (!result.isConfirmed) return;
-
+  
     try {
       const response = await fetch('/api/deleteFile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          publicId, 
-          resourceType: resourceType || 'auto' 
-        }),
+        body: JSON.stringify({ publicId, resourceType }),
       });
-
+  
       const data = await response.json();
-      
+  
       if (!response.ok) {
         throw new Error(data.error || "Failed to delete file");
       }
-
+  
       await deleteDoc(doc(firestore, "users", user.uid, "notes", noteId));
-
+  
       Swal.fire({
         icon: 'success',
         title: 'Deleted!',
         text: 'Your note has been deleted.',
         timer: 1500,
-        showConfirmButton: false
+        showConfirmButton: false,
       });
     } catch (err) {
       console.error("Delete error:", err);
       Swal.fire({
         icon: 'error',
         title: 'Error',
-        text: err.message || 'Failed to delete note. Please try again.'
+        text: err.message || 'Failed to delete note. Please try again.',
       });
     }
   };
