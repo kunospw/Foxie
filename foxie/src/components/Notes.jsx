@@ -5,33 +5,33 @@ import { useAuth } from "../context/AuthContext";
 import { Loader2, Upload, Trash2, RefreshCw } from "lucide-react";
 import Swal from 'sweetalert2';
 
-const getCloudinaryConfig = () => {
-  const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
-  const uploadPreset = process.env.NEXT_PUBLIC_UPLOAD_PRESET;
-  
-  if (!cloudName || !uploadPreset) {
-    console.error('Missing Cloudinary configuration:', {
-      cloudName: !!cloudName,
-      uploadPreset: !!uploadPreset
-    });
-    throw new Error('Missing Cloudinary configuration. Please check your environment variables.');
-  }
-  
-  return {
-    cloudName,
-    uploadPreset,
-    uploadUrl: `https://api.cloudinary.com/v1_1/${cloudName}`
-  };
-};
+const CLOUDINARY_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${process.env.CLOUDINARY_CLOUD_NAME}`;
+const UPLOAD_PRESET = process.env.CLOUDINARY_UPLOAD_PRESET;
+console.log("Cloud Name:", process.env.CLOUDINARY_CLOUD_NAME);
+console.log("Upload Preset:", process.env.CLOUDINARY_UPLOAD_PRESET);
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
-// Verify Cloudinary configuration on component mount
-const verifyCloudinaryConfig = () => {
-  try {
-    return getCloudinaryConfig();
-  } catch (error) {
-    console.error('Cloudinary configuration verification failed:', error);
-    return null;
+const validateFile = (file) => {
+  if (!file) return "Please select a file";
+  
+  if (file.size > MAX_FILE_SIZE) {
+    return "File size exceeds 10MB limit";
   }
+
+  const allowedTypes = {
+    'application/pdf': 'raw',
+    'image/jpeg': 'image',
+    'image/png': 'image',
+    'image/jpg': 'image',
+    'application/msword': 'raw',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'raw'
+  };
+
+  if (!allowedTypes[file.type]) {
+    return "Invalid file type. Please upload PDF, Word, or image files";
+  }
+
+  return null;
 };
 
 const getUploadUrl = (fileType) => {
@@ -57,24 +57,13 @@ const Notes = () => {
   const [selectedCourse, setSelectedCourse] = useState("");
   const [file, setFile] = useState(null);
   const [noteContent, setNoteContent] = useState("");
-  const [isCloudinaryConfigured, setIsCloudinaryConfigured] = useState(true);
 
   useEffect(() => {
     if (!user) {
       setIsLoading(false);
       return;
     }
-    const config = verifyCloudinaryConfig();
-    setIsCloudinaryConfigured(!!config);
-    
-    if (!config) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Configuration Error',
-        text: 'The upload functionality is currently unavailable. Please contact support.',
-        showConfirmButton: true
-      });
-    }
+
     const fetchData = async () => {
       try {
         const coursesQuery = collection(firestore, "users", user.uid, "courses");
@@ -119,15 +108,6 @@ const Notes = () => {
   const handleFileUpload = async () => {
     if (!user) return;
 
-    if (!isCloudinaryConfigured) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Upload Unavailable',
-        text: 'File upload is currently unavailable. Please contact support.'
-      });
-      return;
-    }
-
     const fileError = validateFile(file);
     if (fileError) {
       Swal.fire({
@@ -138,15 +118,18 @@ const Notes = () => {
       return;
     }
 
+    if (!selectedCourse || !noteContent.trim()) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Missing Information',
+        text: 'Please fill in all fields'
+      });
+      return;
+    }
+
     setIsUploading(true);
 
     try {
-      const config = getCloudinaryConfig();
-      
-      if (!config) {
-        throw new Error('Failed to get Cloudinary configuration');
-      }
-
       const selectedCourseName = courses.find(
         (course) => course.id === selectedCourse
       )?.courseName || selectedCourse;
@@ -154,10 +137,11 @@ const Notes = () => {
       const folderPath = `notes/${user.uid}/${selectedCourse}`;
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("upload_preset", config.uploadPreset);
+      formData.append("upload_preset", UPLOAD_PRESET);
       formData.append("folder", folderPath);
 
-      const uploadUrl = `${config.uploadUrl}/${file.type.includes('application/') ? 'raw' : 'image'}/upload`;
+      // Get the appropriate upload URL based on file type
+      const uploadUrl = getUploadUrl(file.type);
 
       const response = await fetch(uploadUrl, {
         method: "POST",
@@ -166,10 +150,13 @@ const Notes = () => {
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`Upload failed: ${errorText}`);
+        throw new Error(`Failed to upload file: ${errorText}`);
       }
 
       const data = await response.json();
+
+      // Store the resource type explicitly
+      const resourceType = file.type === 'application/pdf' || file.type.includes('application/') ? 'raw' : 'image';
 
       await addDoc(collection(firestore, "users", user.uid, "notes"), {
         courseId: selectedCourse,
@@ -179,7 +166,7 @@ const Notes = () => {
         fileName: file.name,
         fileType: file.type,
         publicId: data.public_id,
-        resourceType: file.type.includes('application/') ? 'raw' : 'image',
+        resourceType: resourceType,
         createdAt: new Date(),
       });
 
@@ -196,19 +183,10 @@ const Notes = () => {
       });
     } catch (err) {
       console.error("Upload error details:", err);
-      
-      // More specific error messages based on the error type
-      let errorMessage = 'Failed to upload note. Please try again.';
-      if (err.message.includes('configuration')) {
-        errorMessage = 'Upload service is not properly configured. Please contact support.';
-      } else if (err.message.includes('Upload failed')) {
-        errorMessage = 'File upload failed. Please try again or use a different file.';
-      }
-      
       Swal.fire({
         icon: 'error',
         title: 'Upload Failed',
-        text: errorMessage
+        text: err.message || 'Failed to upload note. Please try again.'
       });
     } finally {
       setIsUploading(false);
