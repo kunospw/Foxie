@@ -5,11 +5,22 @@ import { useAuth } from "../context/AuthContext";
 import { Loader2, Upload, Trash2, RefreshCw } from "lucide-react";
 import Swal from 'sweetalert2';
 
-const CLOUDINARY_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}`;
-const UPLOAD_PRESET = process.env.NEXT_PUBLIC_UPLOAD_PRESET;
-console.log("Cloud Name:", process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME);
-console.log("Upload Preset:", process.env.NEXT_PUBLIC_UPLOAD_PRESET);
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const getCloudinaryConfig = () => {
+  const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
+  const uploadPreset = process.env.NEXT_PUBLIC_UPLOAD_PRESET;
+  
+  if (!cloudName || !uploadPreset) {
+    throw new Error('Cloudinary configuration is missing');
+  }
+  
+  return {
+    cloudName,
+    uploadPreset,
+    uploadUrl: `https://api.cloudinary.com/v1_1/${cloudName}`
+  };
+};
+
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
 const validateFile = (file) => {
   if (!file) return "Please select a file";
@@ -118,18 +129,12 @@ const Notes = () => {
       return;
     }
 
-    if (!selectedCourse || !noteContent.trim()) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Missing Information',
-        text: 'Please fill in all fields'
-      });
-      return;
-    }
-
     setIsUploading(true);
 
     try {
+      // Get Cloudinary config safely
+      const config = getCloudinaryConfig();
+      
       const selectedCourseName = courses.find(
         (course) => course.id === selectedCourse
       )?.courseName || selectedCourse;
@@ -137,11 +142,10 @@ const Notes = () => {
       const folderPath = `notes/${user.uid}/${selectedCourse}`;
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("upload_preset", UPLOAD_PRESET);
+      formData.append("upload_preset", config.uploadPreset);
       formData.append("folder", folderPath);
 
-      // Get the appropriate upload URL based on file type
-      const uploadUrl = getUploadUrl(file.type);
+      const uploadUrl = `${config.uploadUrl}/${file.type.includes('application/') ? 'raw' : 'image'}/upload`;
 
       const response = await fetch(uploadUrl, {
         method: "POST",
@@ -155,9 +159,7 @@ const Notes = () => {
 
       const data = await response.json();
 
-      // Store the resource type explicitly
-      const resourceType = file.type === 'application/pdf' || file.type.includes('application/') ? 'raw' : 'image';
-
+      // Store note in Firestore
       await addDoc(collection(firestore, "users", user.uid, "notes"), {
         courseId: selectedCourse,
         courseName: selectedCourseName,
@@ -166,10 +168,11 @@ const Notes = () => {
         fileName: file.name,
         fileType: file.type,
         publicId: data.public_id,
-        resourceType: resourceType,
+        resourceType: file.type.includes('application/') ? 'raw' : 'image',
         createdAt: new Date(),
       });
 
+      // Reset form
       setFile(null);
       setNoteContent("");
       setSelectedCourse("");
